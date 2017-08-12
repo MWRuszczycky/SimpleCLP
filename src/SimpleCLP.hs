@@ -27,13 +27,11 @@ data Option =
     deriving ( Show, Eq )
 
 data ParseError =
-      NoParseError
-    | RepeatedOptions
-    | MissingShortOption
-    | MissingShortArgument
-    | MissingLongOption
-    | MissingLongArgument
-    | ShortArgInCluster
+      MissingShortOption Char
+    | MissingShortArgument Option
+    | ShortArgInCluster Option
+    | MissingLongOption String
+    | MissingLongArgument Option
     deriving ( Show, Eq )
 
 data OptResult =
@@ -126,27 +124,28 @@ parseCluster (c:[]) = parseShort c
 parseCluster (c:cs) = do
     vOpts <- fmap validShort get
     case lookup c vOpts of
-         Just ( ShortArg _ ) -> cantParse ShortArgInCluster
-         otherwise           -> parseShort c
+         Just a@( ShortArg _ ) -> cantParse $ ShortArgInCluster a
+         otherwise             -> parseShort c
     parseCluster cs
 
 parseShort :: Char -> StateT ParserSt ( Either ParseError ) ()
 parseShort c = do
     vOpts <- fmap validShort get
     case lookup c vOpts of
-         Nothing                 -> cantParse MissingShortOption
+         Nothing                 -> cantParse $ MissingShortOption c
          Just opt@( Short _ )    -> addOpt ( opt, "" )
          Just opt@( ShortArg _ ) -> addShortOptArg opt
 
 parseLong :: String -> StateT ParserSt ( Either ParseError ) ()
 parseLong cmd = do
     vOpts <- fmap validLong get
-    case lookup ( fst . splitLong $ cmd ) vOpts of
-         Nothing                -> cantParse MissingLongOption
+    let s = fst . splitLong $ cmd
+    case lookup s vOpts of
+         Nothing                -> cantParse $ MissingLongOption s
          Just opt@( Long _ )    -> addOpt ( opt, "" )
          Just opt@( LongArg _ ) -> do let arg = snd . splitLong $ cmd
                                       if null arg
-                                         then cantParse MissingLongArgument
+                                         then cantParse $ MissingLongArgument opt
                                          else addOpt ( opt, arg )
 
 popCmd :: StateT ParserSt ( Either ParseError ) ( Maybe String )
@@ -164,8 +163,8 @@ addShortOptArg :: Option -> StateT ParserSt ( Either ParseError ) ()
 addShortOptArg opt = do
     nxtCmd <- popCmd
     case nxtCmd of
-         Nothing       -> cantParse MissingShortArgument
-         Just ('-':cs) -> cantParse MissingShortArgument
+         Nothing       -> cantParse $ MissingShortArgument opt
+         Just ('-':cs) -> cantParse $ MissingShortArgument opt
          Just cs       -> addOpt ( opt, cs )
 
 addOpt :: ( Option, String ) -> StateT ParserSt ( Either ParseError ) ()
