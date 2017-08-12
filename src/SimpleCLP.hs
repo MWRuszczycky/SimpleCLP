@@ -49,8 +49,12 @@ type OptsArgs = (Options, Arguments)
 ---------------------------------------
 -- Private types
 
-data ParserSt = ParserSt { validShort :: [ (Char, Option) ]
-                         , validLong  :: [ (String, Option) ]
+type ShortDict = [ ( Char, Option ) ]
+
+type LongDict = [ ( String, Option ) ]
+
+data ParserSt = ParserSt { validShort :: ShortDict
+                         , validLong  :: LongDict
                          , unparsed   :: [String]
                          , pOpts      :: Options
                          , pArgs      :: Arguments
@@ -67,21 +71,18 @@ parseCmdLine vopts cmds =
          Right pSt   -> Right ( pOpts pSt, pArgs pSt )
 
 initParser :: ValidOptions -> [String] -> ParserSt
-initParser vopts cmds = ParserSt { validShort = foldl getShort [] vopts
-                                 , validLong  = foldl getLong [] vopts
-                                 , unparsed   = cmds
-                                 , pOpts      = []
-                                 , pArgs      = [] }
+initParser vopts cmds = let valid = foldl getValid ( [], [] ) vopts
+                        in  ParserSt { validShort = fst valid
+                                     , validLong  = snd valid
+                                     , unparsed   = cmds
+                                     , pOpts      = []
+                                     , pArgs      = [] }
 
-getShort :: [ ( Char, Option ) ] -> Option -> [ ( Char, Option )]
-getShort acc ( Short c )    = acc ++ [ ( c, Short c ) ]
-getShort acc ( ShortArg c ) = acc ++ [ ( c, ShortArg c ) ]
-getShort acc _              = acc
-
-getLong :: [ ( String, Option ) ] -> Option -> [ ( String, Option ) ]
-getLong acc ( Long s )    = acc ++ [ ( s, Long s ) ]
-getLong acc ( LongArg s ) = acc ++ [ ( s, LongArg s ) ]
-getLong acc _             = acc
+getValid :: ( ShortDict, LongDict ) -> Option -> ( ShortDict, LongDict )
+getValid (s,l) ( Short x )    = let s' = s ++ [ ( x, Short x ) ]    in ( s', l )
+getValid (s,l) ( ShortArg x ) = let s' = s ++ [ ( x, ShortArg x ) ] in ( s', l )
+getValid (s,l) ( Long x )     = let l' = l ++ [ ( x, Long x ) ]     in ( s, l' )
+getValid (s,l) ( LongArg x )  = let l' = l ++ [ ( x, LongArg x) ]   in ( s, l' )
 
 parseM :: StateT ParserSt ( Either ParseError ) ()
 parseM = do
