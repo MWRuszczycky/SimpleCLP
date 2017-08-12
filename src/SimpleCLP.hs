@@ -119,9 +119,9 @@ addShortOptArg opt = do
          Just cs       -> addOpt ( opt, Arg cs )
 
 addArg :: String -> StateT ParserSt ( Either ParseError ) ()
-addArg cmd = StateT $ \ pSt -> let args = pArgs pSt
-                               in  Right $ ( ()
-                                           , pSt { pArgs = ( Arg cmd ):args } )
+addArg cmd = StateT $ \ pSt ->
+    let args = pArgs pSt
+    in  Right $ ( () , pSt { pArgs = args ++ [ Arg cmd ] } )
 
 parseLong :: String -> StateT ParserSt ( Either ParseError ) ()
 parseLong cmd = do
@@ -136,7 +136,7 @@ parseLong cmd = do
 
 addOpt :: ( Option, Argument ) -> StateT ParserSt ( Either ParseError ) ()
 addOpt x = StateT $ \ pSt -> let xs = pOpts pSt
-                             in  Right $ ( (), pSt { pOpts = x:xs } )
+                             in  Right $ ( (), pSt { pOpts = xs ++ [x] } )
 
 cantParse :: ParseError -> StateT ParserSt ( Either ParseError ) ()
 cantParse e = StateT $ \ pSt -> Left e
