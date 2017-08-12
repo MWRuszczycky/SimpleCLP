@@ -5,6 +5,7 @@ module SimpleCLP
     , optUsed
     , Option       (..)
     , Options      (..)
+    , OptResult    (..)
     , Arguments    (..)
     , ValidOptions (..)
     , OptsArgs     (..)
@@ -98,6 +99,8 @@ parseCmdLine vopts cmds =
          Right pSt   -> Right ( collect . pOpts $ pSt, pArgs pSt )
 
 getParsedArgs :: ValidOptions -> IO ( Either ParseError OptsArgs )
+-- ^Convenience function that wraps System.Environment.getArgs with
+-- parseCmdLine into a single function in the IO monad.
 getParsedArgs vopts = do
     cmds <- getArgs
     return . parseCmdLine vopts $ cmds
@@ -163,7 +166,7 @@ parseM = do
     nxtCmd <- popCmd
     case nxtCmd of
          Nothing           -> return ()
-         Just "--"         -> makeAllArgs
+         Just "--"         -> addArg "--"     >> makeAllArgs
          Just "-"          -> addArg "-"      >> parseM
          Just ('-':'-':cs) -> parseLong cs    >> parseM
          Just ('-':cs)     -> parseCluster cs >> parseM
