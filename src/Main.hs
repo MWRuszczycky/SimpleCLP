@@ -1,5 +1,4 @@
 import qualified SimpleCLP          as SP
-import qualified System.Environment as SE ( getArgs )
 
 validOpts :: SP.ValidOptions
 -- ^Arbitrary collection of the four types of options for testing.
@@ -15,9 +14,8 @@ main :: IO ()
 -- evaluations of the SP.chkOpt and SP.optUsed convenience functions
 -- for all the valid options defined above.
 main = do
-    cmds <- SE.getArgs
-    let etOpts = SP.parseCmdLine validOpts cmds
-    case SP.parseCmdLine validOpts cmds of
+    etParsedCmds <- SP.getParsedArgs validOpts
+    case etParsedCmds of
          Left  e -> putStrLn . show $ e
          Right x -> doController x
 

@@ -1,5 +1,6 @@
 module SimpleCLP
     ( parseCmdLine
+    , getParsedArgs
     , chkOpt
     , optUsed
     , Option       (..)
@@ -11,6 +12,7 @@ module SimpleCLP
     ) where
 
 import Data.List                 ( foldl', delete )
+import System.Environment        ( getArgs )
 import Control.Monad.Trans.State ( StateT, StateT (..), execStateT, get )
 
 ---------------------------------------------------------------------
@@ -94,6 +96,11 @@ parseCmdLine vopts cmds =
     case execStateT parseM $ initParser vopts cmds of
          Left pError -> Left pError
          Right pSt   -> Right ( collect . pOpts $ pSt, pArgs pSt )
+
+getParsedArgs :: ValidOptions -> IO ( Either ParseError OptsArgs )
+getParsedArgs vopts = do
+    cmds <- getArgs
+    return . parseCmdLine vopts $ cmds
 
 chkOpt :: Options -> Option -> OptResult
 -- ^More expressive convenience function for looking up an option.
