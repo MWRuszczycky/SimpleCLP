@@ -23,11 +23,6 @@ data Option =
     | LongArg  String
     deriving ( Show, Eq )
 
-data Argument =
-      Arg String
-    | NoArg
-    deriving ( Show, Eq )
-
 data ParseError =
       NoParseError
     | RepeatedOptions
@@ -40,9 +35,9 @@ data ParseError =
 
 type ValidOptions = [ Option ]
 
-type Options = [ (Option, Argument) ]
+type Options = [ (Option, String) ]
 
-type Arguments = [ Argument ]
+type Arguments = [ String ]
 
 type OptsArgs = (Options, Arguments)
 
@@ -71,7 +66,7 @@ parseCmdLine vopts cmds =
          Right pSt   -> Right ( pOpts pSt, pArgs pSt )
 
 initParser :: ValidOptions -> [String] -> ParserSt
-initParser vopts cmds = let valid = foldl getValid ( [], [] ) vopts
+initParser vopts cmds = let valid = foldl' getValid ( [], [] ) vopts
                         in  ParserSt { validShort = fst valid
                                      , validLong  = snd valid
                                      , unparsed   = cmds
@@ -108,7 +103,7 @@ parseShort c = do
     vOpts <- fmap validShort get
     case lookup c vOpts of
          Nothing                 -> cantParse MissingShortOption
-         Just opt@( Short _ )    -> addOpt ( opt, NoArg )
+         Just opt@( Short _ )    -> addOpt ( opt, "" )
          Just opt@( ShortArg _ ) -> addShortOptArg opt
 
 addShortOptArg :: Option -> StateT ParserSt ( Either ParseError ) ()
@@ -117,25 +112,25 @@ addShortOptArg opt = do
     case nxtCmd of
          Nothing       -> cantParse MissingShortArgument
          Just ('-':cs) -> cantParse MissingShortArgument
-         Just cs       -> addOpt ( opt, Arg cs )
+         Just cs       -> addOpt ( opt, cs )
 
 addArg :: String -> StateT ParserSt ( Either ParseError ) ()
 addArg cmd = StateT $ \ pSt ->
     let args = pArgs pSt
-    in  Right $ ( () , pSt { pArgs = args ++ [ Arg cmd ] } )
+    in  Right $ ( () , pSt { pArgs = args ++ [ cmd ] } )
 
 parseLong :: String -> StateT ParserSt ( Either ParseError ) ()
 parseLong cmd = do
     vOpts <- fmap validLong get
     case lookup ( fst . splitLong $ cmd ) vOpts of
          Nothing                -> cantParse MissingLongOption
-         Just opt@( Long _ )    -> addOpt ( opt, NoArg )
+         Just opt@( Long _ )    -> addOpt ( opt, "" )
          Just opt@( LongArg _ ) -> do let arg = snd . splitLong $ cmd
                                       if null arg
                                          then cantParse MissingLongArgument
-                                         else addOpt ( opt, Arg arg )
+                                         else addOpt ( opt, arg )
 
-addOpt :: ( Option, Argument ) -> StateT ParserSt ( Either ParseError ) ()
+addOpt :: ( Option, String ) -> StateT ParserSt ( Either ParseError ) ()
 addOpt x = StateT $ \ pSt -> let xs = pOpts pSt
                              in  Right $ ( (), pSt { pOpts = xs ++ [x] } )
 
