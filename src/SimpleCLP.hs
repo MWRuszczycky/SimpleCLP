@@ -1,6 +1,9 @@
 module SimpleCLP
     ( parseCmdLine
+    , chkOpt
+    , optUsed
     , Option (..)
+    , Options (..)
     , ValidOptions (..)
     , OptsArgs (..)
     , ParseError (..)
@@ -33,6 +36,12 @@ data ParseError =
     | ShortArgInCluster
     deriving ( Show, Eq )
 
+data OptResult =
+      NotUsed
+    | Used
+    | UsedArg String
+    deriving ( Show, Eq )
+
 type ValidOptions = [ Option ]
 
 type Options = [ (Option, String) ]
@@ -59,11 +68,31 @@ data ParserSt = ParserSt { validShort :: ShortDict
 -- Functions
 ---------------------------------------------------------------------
 
+---------------------------------------------------------------------
+-- Exported functions
+
 parseCmdLine :: ValidOptions -> [String] -> Either ParseError OptsArgs
 parseCmdLine vopts cmds =
     case execStateT parseM $ initParser vopts cmds of
          Left pError -> Left pError
          Right pSt   -> Right ( pOpts pSt, pArgs pSt )
+
+chkOpt :: Options -> Option -> OptResult
+chkOpt opts opt = case lookup opt opts of
+                       Nothing  -> NotUsed
+                       Just ""  -> Used
+                       Just arg -> UsedArg arg
+
+optUsed :: Options -> Option -> Bool
+optUsed opts opt
+    | chkOpt opts opt == NotUsed = False
+    | otherwise                  = True
+
+---------------------------------------------------------------------
+-- Private functions
+
+--------------------------------------
+-- Initialization
 
 initParser :: ValidOptions -> [String] -> ParserSt
 initParser vopts cmds = let valid = foldl' getValid ( [], [] ) vopts
@@ -78,6 +107,9 @@ getValid (s,l) ( Short x )    = let s' = s ++ [ ( x, Short x ) ]    in ( s', l )
 getValid (s,l) ( ShortArg x ) = let s' = s ++ [ ( x, ShortArg x ) ] in ( s', l )
 getValid (s,l) ( Long x )     = let l' = l ++ [ ( x, Long x ) ]     in ( s, l' )
 getValid (s,l) ( LongArg x )  = let l' = l ++ [ ( x, LongArg x) ]   in ( s, l' )
+
+---------------------------------------
+-- Parsing monad
 
 parseM :: StateT ParserSt ( Either ParseError ) ()
 parseM = do
@@ -106,19 +138,6 @@ parseShort c = do
          Just opt@( Short _ )    -> addOpt ( opt, "" )
          Just opt@( ShortArg _ ) -> addShortOptArg opt
 
-addShortOptArg :: Option -> StateT ParserSt ( Either ParseError ) ()
-addShortOptArg opt = do
-    nxtCmd <- popCmd
-    case nxtCmd of
-         Nothing       -> cantParse MissingShortArgument
-         Just ('-':cs) -> cantParse MissingShortArgument
-         Just cs       -> addOpt ( opt, cs )
-
-addArg :: String -> StateT ParserSt ( Either ParseError ) ()
-addArg cmd = StateT $ \ pSt ->
-    let args = pArgs pSt
-    in  Right $ ( () , pSt { pArgs = args ++ [ cmd ] } )
-
 parseLong :: String -> StateT ParserSt ( Either ParseError ) ()
 parseLong cmd = do
     vOpts <- fmap validLong get
@@ -130,12 +149,37 @@ parseLong cmd = do
                                          then cantParse MissingLongArgument
                                          else addOpt ( opt, arg )
 
+popCmd :: StateT ParserSt ( Either ParseError ) ( Maybe String )
+popCmd = StateT $ \ pSt -> case unparsed pSt of
+                                []     -> Right ( Nothing, pSt )
+                                (x:xs) -> Right ( Just x
+                                                , pSt { unparsed = xs } )
+
+addArg :: String -> StateT ParserSt ( Either ParseError ) ()
+addArg cmd = StateT $ \ pSt ->
+    let args = pArgs pSt
+    in  Right $ ( () , pSt { pArgs = args ++ [ cmd ] } )
+
+addShortOptArg :: Option -> StateT ParserSt ( Either ParseError ) ()
+addShortOptArg opt = do
+    nxtCmd <- popCmd
+    case nxtCmd of
+         Nothing       -> cantParse MissingShortArgument
+         Just ('-':cs) -> cantParse MissingShortArgument
+         Just cs       -> addOpt ( opt, cs )
+
 addOpt :: ( Option, String ) -> StateT ParserSt ( Either ParseError ) ()
 addOpt x = StateT $ \ pSt -> let xs = pOpts pSt
                              in  Right $ ( (), pSt { pOpts = xs ++ [x] } )
 
+---------------------------------------
+-- Error handling
+
 cantParse :: ParseError -> StateT ParserSt ( Either ParseError ) ()
 cantParse e = StateT $ \ pSt -> Left e
+
+---------------------------------------
+-- Helper functions
 
 splitLong :: String -> (String, String)
 splitLong s = (opt, arg)
@@ -143,9 +187,3 @@ splitLong s = (opt, arg)
           arg = case dropWhile ( /= '=' ) s of
                      '=':ss    -> ss
                      otherwise -> []
-
-popCmd :: StateT ParserSt ( Either ParseError ) ( Maybe String )
-popCmd = StateT $ \ pSt -> case unparsed pSt of
-                                []     -> Right ( Nothing, pSt )
-                                (x:xs) -> Right ( Just x
-                                                , pSt { unparsed = xs } )
