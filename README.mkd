@@ -1,3 +1,141 @@
-# Simple Command Line Parser
+# SimpleCLP: A Simple Command Line Parser for Haskell
 
-This is a simple command line parser.
+This is a Haskell module for parsing a command line that follows the
+[GNU recommendations](https://www.gnu.org/software/libc/manual/html_node/Argument-Syntax.html),
+which are in turn adapted from the POSIX standards. The `SimpleCLP` module has no external dependencies beyond the standard library.
+
+## How do you use it?
+
+The module is contained in the `src/SimpleCLP.hs` source file. It has no external dependencies beyond the standard library, so just copy this single file to your project and import it as `import SimpleCLP`. The `Main.hs` source file in this repository contains a demo program that reads a command line and displays the parsing results using an arbitrary set of valid short and long options. You can mess around with this to make sure the module does what you want. The module exports the following types and functions, which are explained in the following sections
+```haskell
+data Option = Short Char | ShortArg Char | Long String | LongArg String
+    deriving ( Show, Eq )
+data OptResult = NotUsed | Used | UsedArg String
+    deriving ( Show, Eq )
+data ParseError =
+      MissingShortOption Char
+    | MissingShortArgument Option
+    | MissingLongOption String
+    | MissingLongArgument Option
+    deriving ( Show, Eq )
+
+type ValidOptions = [ Option ]
+type Options      = [ (Option, String) ]
+type Arguments    = [ String ]
+type OptsArgs     = (Options, Arguments)
+
+
+parseCmdLine  :: ValidOptions -> [String] -> Either ParseError OptsArgs
+getParsedArgs :: ValidOptions -> IO ( Either ParseError OptsArgs )
+chkOpt        :: Options -> Option -> OptResult
+optUsed       :: Options -> Option -> Bool
+```
+
+## How does it work?
+
+### Setting valid options and parsing a command line
+
+Options that your program will take are specified as values of the `Option` algebraic data type and can have one of four different values:
+
+* `Short Char` : A single character option that *does not* take an argument. These are specified on the command line as `-a`, `-b`, etc.
+* `ShortArg Char` : A single character option that *does* take an argument. These are specified on the command line as `-xarg` or `-x arg`, where `arg` is the option argument.
+* `Long String` : A string option that *does not* take an argument. These are specified on the command line as `--paper`, `--rock`, etc. The option name can have internal hyphens.
+* `LongArg String` : A string option that *does* take an argument. These are specified on the command line as `--animal=cat`. The option name can have internal hyphens.
+
+A list of `Option`s is aliased as a `ValidOptions` data type and used to parse a command line specified as a value of type `[String]`. There are two ways to do this. The first is using the `parseCmdLine` function, which has the type signature
+```haskell
+parseCmdLine :: ValidOptions -> [String] -> Either ParseError OptsArgs
+```
+This function evaluates to a value of type `Left ParseError` if parsing fails (see below) or `Right OptsArgs` if parsing succeeds. The relevant types for successful parsing are
+```haskell
+type OptsArgs  = (Options, Arguments)
+type Options   = [ (Option, String) ]
+type Arguments = [ String ]
+```
+A value of type `Arguments` is just a list of strings parsed as non-option arguments. A value of type `Options` is an association list of valid options as the keys and the associated option arguments parsed from the command line as the mapped values. If an option does not take an argument, then the mapped value is an empty string (`""`). The value of type `OptsArgs` returned from evaluation of `parseCmdLine` is then just a pair of the parsed options and their arguments and the parsed non-option arguments. The function `getParsedArgs` is a convenience function that wraps `parseCmdLine` together with `System.Environment.getArgs`,
+```haskell
+getParsedArgs :: ValidOptions -> IO ( Either ParseError OptsArgs )
+```
+This allows you to read the command line and parse it in single IO action. An example of use, might be
+```haskell
+import qualified SimpleCLP as SP
+
+validOpts :: SP.ValidOptions
+validOpts = so ++ soa ++ lo ++ loa
+    where so  = map SP.Short    [ 'a', 'b', 'c' ]
+          soa = map SP.ShortArg [ 'x', 'y', 'z' ]
+          lo  = map SP.Long     [ "rock", "paper", "scissors" ]
+          loa = map SP.LongArg  [ "animal", "vegetable", "mineral" ]
+
+main :: IO ()
+main = do
+    etParsedCmds <- SP.getParsedArgs validOpts
+    case etParsedCmds of
+         Left  err          -> ... -- Do something with the parsing error.
+         Right (opts, args) -> ... -- Do something with the parsed options
+                                   -- and non-option arguments
+```
+
+### Working with parsed options and arguments
+
+The parsed options and non-option arguments are returned in the order they appear on the command line. Working with the non-option arguments is straight-forward, since they are returned as list of strings. The parsed options of type `Options` is an association list as described above. Therefore, it can be manipulated using `lookup`, etc. However, SimpleCLP supplies two convenience functions for checking if a valid option was supplied and what argument it has if any. The first function is
+```haskell
+optUsed :: Options -> Option -> Bool
+```
+Here you supply the parsed list of options and the option that is being queried. It returns `True` if the queried option was supplied and `False` if not. This is a little more expressive than using `elem`. The second function is
+```haskell
+chkOpt :: Options -> Option -> OptResult
+```
+The `chkOpt` function works like a more expressive version of `lookup` with the arguments flipped so that you can partially apply it easily to the parsed options from `parseCmdLine` (or `getParsedArgs`). The evaluation type `OptResult` is an algebraic type that takes three possible values
+
+* `NotUsed` : The option was not specified on the command line.
+* `Used` : The option was specified on the command line and does not take an argument.
+* `UsedArg String` : The option was specified on the command line and takes the given argument as the wrapped string.
+
+Note that an option will appear only once in the parsed options. Even if it is specified multiple times on the command line. If the option takes an argument and is specified multiple times, then all the arguments will be concatentated into a single string separated by spaces. For example, a command line of the form
+```bash
+$ myProgram --animal=dog --animal=cat
+```
+where there is a valid option `LongArg "animal"` will parse to an association list of options with a single pair `(LongArg "animal", "dog cat")`. The options and their associated arguments will appear in the order that they are specified on the command line.
+
+### Additional details
+
+As specified by the
+[GNU recommendations](https://www.gnu.org/software/libc/manual/html_node/Argument-Syntax.html),
+single character (i.e., short) options can be clustered. Thus, the following command lines
+```bash
+$ myProgram -a -b -c
+$ myProgram -abc
+```
+will be parsed the same way. If one of the short options takes an argument, it can appear in a cluster; however, everything following it (including hyphens) will be parsed as its argument. For example, the following command lines will all parse the same way (where `-x` alone takes an argument):
+```bash
+$ myProgram -a -x c -b
+$ myProgram -a -xc -b
+$ myProgram -axc -b
+$ myProgram -abxc
+```
+However,
+```bash
+$ myProgram -axcb
+```
+will parse the argument of `-x` as `cb` and not `c`, and `-b` will not be recognized as a separate option. Likewise,
+```bash
+$ myProgram -axc-b
+$ myProgram -ax-cb
+```
+will only recognize `-a` and `-x` as options, with the argument of `-x` being `c-b` and `-cb`, respectively.
+
+If a single, isolated hyphen `-` is supplied on the command line, it will always be parsed as a non-option argument. If an isolated double-hyphen `--` is supplied on the command line, then it is included as an argument, and everything following it on the command line is parsed as a non-option argument regardless of hyphenation.
+
+## How are parsing errors handled?
+
+The module recognizes four error situations when attempting to parse a command line. The errors are of type `ParseError` and returned as `Left` values when running `parseCmdLine` or `getParsedArgs`. The errors are
+
+* `MissingShortOption Char` : A character was specified as a short (i.e., single character) option; however, no such valid option was supplied to the parsing function. The character specified as an option is wrapped by the error.
+* `MissingShortArgument Option` : A valid short option that takes an argument was specified on the command line; however, no argument could be found. The option missing its argument is wrapped by the error.
+* `MissingLongOption String` : A string was specified as a long (i.e., string) option; however, no such valid option was supplied to the parsing function. The string specified as an option is wrapped by the error.
+* `MissingLongArgument Option` : A valid long option that takes an argument was specified on the command line; however, no argument could be found. The option missing its argument is wrapped by the error.
+
+## License
+
+This program is licensed under a [BSD 3-Clause License](http://opensource.org/licenses/BSD-3-Clause) (see the `LICENSE` file).
