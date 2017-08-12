@@ -88,7 +88,7 @@ parseM = do
     nxtCmd <- popCmd
     case nxtCmd of
          Nothing           -> return ()
-         Just ('-':'-':cs) -> parseLongOpt cs >> parseM
+         Just ('-':'-':cs) -> parseLong cs >> parseM
          Just ('-':cs)     -> parseCluster cs >> parseM
          Just cs           -> addArg cs >> parseM
 
@@ -123,8 +123,8 @@ addArg cmd = StateT $ \ pSt -> let args = pArgs pSt
                                in  Right $ ( ()
                                            , pSt { pArgs = ( Arg cmd ):args } )
 
-parseLongOpt :: String -> StateT ParserSt ( Either ParseError ) ()
-parseLongOpt cmd = do
+parseLong :: String -> StateT ParserSt ( Either ParseError ) ()
+parseLong cmd = do
     vOpts <- fmap validLong get
     case lookup ( fst . splitLong $ cmd ) vOpts of
          Nothing                -> cantParse MissingLongOption
