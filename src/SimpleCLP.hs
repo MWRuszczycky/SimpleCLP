@@ -87,12 +87,12 @@ parseM = do
          Nothing           -> return ()
          Just ('-':'-':cs) -> parseLongOpt cs >> parseM
          -- Just ('-':cs)     -> parseShortOpt cs >> parseM
-         Just cs           -> parseArg cs >> parseM
+         Just cs           -> addArg cs >> parseM
 
-parseArg :: String -> StateT ParserSt ( Either ParseError ) ()
-parseArg cmd = StateT $ \ pSt ->
-    let args = pArgs pSt
-    in  Right $ ( () , pSt { pArgs = ( Arg cmd ):args } )
+addArg :: String -> StateT ParserSt ( Either ParseError ) ()
+addArg cmd = StateT $ \ pSt -> let args = pArgs pSt
+                               in  Right $ ( ()
+                                           , pSt { pArgs = ( Arg cmd ):args } )
 
 parseLongOpt :: String -> StateT ParserSt ( Either ParseError ) ()
 parseLongOpt cmd = do
