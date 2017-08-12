@@ -4,7 +4,14 @@ import qualified System.Environment as SE   ( getArgs )
 main :: IO ()
 main = do
     cmds <- SE.getArgs
-    putStrLn . show $ S.parseCmdLine validOpts cmds
+    case S.parseCmdLine validOpts cmds of
+         Left  e -> putStrLn . show $ e
+         Right x -> prettyOptsArgs x
+
+prettyOptsArgs :: S.OptsArgs -> IO ()
+prettyOptsArgs (opts, args) = do
+    mapM_ ( \ (o, a) -> putStrLn $ show o ++ " : " ++ show a ) opts
+    mapM_ ( putStrLn . show ) args
 
 validOpts :: S.ValidOptions
 validOpts = so ++ soa ++ lo ++ loa

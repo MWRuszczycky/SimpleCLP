@@ -2,7 +2,7 @@ module SimpleCLP
     ( parseCmdLine
     , Option (..)
     , ValidOptions (..)
-    , OptArgs (..)
+    , OptsArgs (..)
     , ParseError (..)
     ) where
 
@@ -44,7 +44,7 @@ type Options = [ (Option, Argument) ]
 
 type Arguments = [ Argument ]
 
-type OptArgs = (Options, Arguments)
+type OptsArgs = (Options, Arguments)
 
 ---------------------------------------
 -- Private types
@@ -60,7 +60,7 @@ data ParserSt = ParserSt { validShort :: [ (Char, Option) ]
 -- Functions
 ---------------------------------------------------------------------
 
-parseCmdLine :: ValidOptions -> [String] -> Either ParseError OptArgs
+parseCmdLine :: ValidOptions -> [String] -> Either ParseError OptsArgs
 parseCmdLine vopts cmds =
     case execStateT parseM $ initParser vopts cmds of
          Left pError -> Left pError
