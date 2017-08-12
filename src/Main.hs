@@ -1,30 +1,34 @@
-import qualified SimpleCLP          as S
-import qualified System.Environment as SE   ( getArgs )
+import qualified SimpleCLP          as SP
+import qualified System.Environment as SE ( getArgs )
+
+validOpts :: SP.ValidOptions
+-- ^Arbitrary collection of the four types of options for testing.
+validOpts = so ++ soa ++ lo ++ loa
+    where so  = map SP.Short    [ 'a', 'b', 'c' ]
+          soa = map SP.ShortArg [ 'x', 'y', 'z' ]
+          lo  = map SP.Long     [ "rock", "paper", "scissors" ]
+          loa = map SP.LongArg  [ "animal", "vegetable", "mineral" ]
 
 main :: IO ()
+-- ^All this does is take the specified command line options and
+-- arguments and prints them back in parsed form along with the
+-- evaluations of the SP.chkOpt and SP.optUsed convenience functions
+-- for all the valid options defined above.
 main = do
     cmds <- SE.getArgs
-    let etOpts = S.parseCmdLine validOpts cmds
-    case S.parseCmdLine validOpts cmds of
+    let etOpts = SP.parseCmdLine validOpts cmds
+    case SP.parseCmdLine validOpts cmds of
          Left  e -> putStrLn . show $ e
          Right x -> doController x
 
-doController :: S.OptsArgs -> IO ()
+doController :: SP.OptsArgs -> IO ()
 doController (opts, args) = do
     mapM_ ( prettyOpt opts ) validOpts
     mapM_ ( \ x -> putStrLn $ "argument: " ++ x ) args
-    putStrLn . show $ opts
 
-prettyOpt :: S.Options -> S.Option -> IO ()
+prettyOpt :: SP.Options -> SP.Option -> IO ()
 prettyOpt opts opt = do
-    let check = show $ S.chkOpt opts opt
-        used  = show $ S.optUsed opts opt
+    let check = show $ SP.chkOpt opts opt
+        used  = show $ SP.optUsed opts opt
         disp  = show opt
     putStrLn $ "option: " ++ disp ++ " | " ++ check ++ " | " ++ used
-
-validOpts :: S.ValidOptions
-validOpts = so ++ soa ++ lo ++ loa
-    where so  = map S.Short    [ 'a', 'b', 'c' ]
-          soa = map S.ShortArg [ 'x', 'y', 'z' ]
-          lo  = map S.Long     [ "runs", "flies", "swims" ]
-          loa = map S.LongArg  [ "mammal", "fish", "bird" ]

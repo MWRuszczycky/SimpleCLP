@@ -2,11 +2,12 @@ module SimpleCLP
     ( parseCmdLine
     , chkOpt
     , optUsed
-    , Option (..)
-    , Options (..)
+    , Option       (..)
+    , Options      (..)
+    , Arguments    (..)
     , ValidOptions (..)
-    , OptsArgs (..)
-    , ParseError (..)
+    , OptsArgs     (..)
+    , ParseError   (..)
     ) where
 
 import Data.List                 ( foldl', delete )
@@ -33,7 +34,6 @@ data OptResult =
     | Used                  -- Option was used but does not take an argument.
     | UsedArg String        -- Option was used with the supplied argument.
     deriving ( Show, Eq )
-
 
 -- |Errors that may be raised while parsing the command line.
 data ParseError =
