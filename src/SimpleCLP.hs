@@ -31,8 +31,11 @@ data Argument =
 data ParseError =
       NoParseError
     | RepeatedOptions
+    | MissingShortOption
+    | MissingShortArgument
     | MissingLongOption
     | MissingLongArgument
+    | ShortArgInCluster
     deriving ( Show, Eq )
 
 type ValidOptions = [ Option ]
@@ -86,8 +89,34 @@ parseM = do
     case nxtCmd of
          Nothing           -> return ()
          Just ('-':'-':cs) -> parseLongOpt cs >> parseM
-         -- Just ('-':cs)     -> parseShortOpt cs >> parseM
+         Just ('-':cs)     -> parseCluster cs >> parseM
          Just cs           -> addArg cs >> parseM
+
+parseCluster :: String -> StateT ParserSt ( Either ParseError ) ()
+parseCluster []     = return ()
+parseCluster (c:[]) = parseShort c
+parseCluster (c:cs) = do
+    vOpts <- fmap validShort get
+    case lookup c vOpts of
+         Just ( ShortArg _ ) -> cantParse ShortArgInCluster
+         otherwise           -> parseShort c
+    parseCluster cs
+
+parseShort :: Char -> StateT ParserSt ( Either ParseError ) ()
+parseShort c = do
+    vOpts <- fmap validShort get
+    case lookup c vOpts of
+         Nothing                 -> cantParse MissingShortOption
+         Just opt@( Short _ )    -> addOpt ( opt, NoArg )
+         Just opt@( ShortArg _ ) -> addShortOptArg opt
+
+addShortOptArg :: Option -> StateT ParserSt ( Either ParseError ) ()
+addShortOptArg opt = do
+    nxtCmd <- popCmd
+    case nxtCmd of
+         Nothing       -> cantParse MissingShortArgument
+         Just ('-':cs) -> cantParse MissingShortArgument
+         Just cs       -> addOpt ( opt, Arg cs )
 
 addArg :: String -> StateT ParserSt ( Either ParseError ) ()
 addArg cmd = StateT $ \ pSt -> let args = pArgs pSt
@@ -99,8 +128,8 @@ parseLongOpt cmd = do
     vOpts <- fmap validLong get
     case lookup ( fst . splitLong $ cmd ) vOpts of
          Nothing                -> cantParse MissingLongOption
-         Just opt@( Long s )    -> addOpt ( opt, NoArg )
-         Just opt@( LongArg s ) -> do let arg = snd . splitLong $ cmd
+         Just opt@( Long _ )    -> addOpt ( opt, NoArg )
+         Just opt@( LongArg _ ) -> do let arg = snd . splitLong $ cmd
                                       if null arg
                                          then cantParse MissingLongArgument
                                          else addOpt ( opt, Arg arg )
