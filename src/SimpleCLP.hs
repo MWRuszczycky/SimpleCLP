@@ -6,7 +6,7 @@ module SimpleCLP
     , ParseError (..)
     ) where
 
-import Control.Monad.Trans.State ( StateT, StateT (..), execStateT )
+import Control.Monad.Trans.State ( StateT, StateT (..), execStateT, get )
 import Data.List ( foldl' )
 
 ---------------------------------------------------------------------
@@ -46,10 +46,11 @@ type OptArgs = (Options, Arguments)
 ---------------------------------------
 -- Private types
 
-data ParserSt = ParserSt { valid    :: ValidOptions
-                         , unparsed :: [String]
-                         , pOpts    :: Options
-                         , pArgs    :: Arguments
+data ParserSt = ParserSt { validShort :: [ (Char, Option) ]
+                         , validLong  :: [ (String, Option) ]
+                         , unparsed   :: [String]
+                         , pOpts      :: Options
+                         , pArgs      :: Arguments
                          } deriving ( Show )
 
 ---------------------------------------------------------------------
@@ -63,10 +64,21 @@ parseCmdLine vopts cmds =
          Right pSt   -> Right ( pOpts pSt, pArgs pSt )
 
 initParser :: ValidOptions -> [String] -> ParserSt
-initParser vopts cmds = ParserSt { valid    = vopts
-                                 , unparsed = cmds
-                                 , pOpts    = []
-                                 , pArgs    = [] }
+initParser vopts cmds = ParserSt { validShort = foldl getShort [] vopts
+                                 , validLong  = foldl getLong [] vopts
+                                 , unparsed   = cmds
+                                 , pOpts      = []
+                                 , pArgs      = [] }
+
+getShort :: [ ( Char, Option ) ] -> Option -> [ ( Char, Option )]
+getShort acc ( Short c )    = acc ++ [ ( c, Short c ) ]
+getShort acc ( ShortArg c ) = acc ++ [ ( c, ShortArg c ) ]
+getShort acc _              = acc
+
+getLong :: [ ( String, Option ) ] -> Option -> [ ( String, Option ) ]
+getLong acc ( Long s )    = acc ++ [ ( s, Long s ) ]
+getLong acc ( LongArg s ) = acc ++ [ ( s, LongArg s ) ]
+getLong acc _             = acc
 
 parseM :: StateT ParserSt ( Either ParseError ) ()
 parseM = do
@@ -74,7 +86,7 @@ parseM = do
     case nxtCmd of
          Nothing           -> return ()
          Just ('-':'-':cs) -> parseLongOpt cs >> parseM
-         --Just ('-':cs)     -> parseShortOpt cs >> parseM
+         -- Just ('-':cs)     -> parseShortOpt cs >> parseM
          Just cs           -> parseArg cs >> parseM
 
 parseArg :: String -> StateT ParserSt ( Either ParseError ) ()
@@ -83,21 +95,22 @@ parseArg cmd = StateT $ \ pSt ->
     in  Right $ ( () , pSt { pArgs = ( Arg cmd ):args } )
 
 parseLongOpt :: String -> StateT ParserSt ( Either ParseError ) ()
-parseLongOpt cmd = StateT $ \ pSt ->
-    let mbOpt = getLongOpt ( valid pSt ) cmd
-    in  case mbOpt of
-             Nothing                     -> Left MissingLongOption
-             Just ( LongArg _ , Arg [] ) -> Left MissingLongArgument
-             Just opt                    -> let opts = pOpts pSt
-                                            in Right $
-                                               ( () , pSt { pOpts = opt:opts } )
+parseLongOpt cmd = do
+    vOpts <- fmap validLong get
+    case lookup ( fst . splitLong $ cmd ) vOpts of
+         Nothing                -> cantParse MissingLongOption
+         Just opt@( Long s )    -> addOpt ( opt, NoArg )
+         Just opt@( LongArg s ) -> do let arg = snd . splitLong $ cmd
+                                      if null arg
+                                         then cantParse MissingLongArgument
+                                         else addOpt ( opt, Arg arg )
 
-getLongOpt :: ValidOptions -> String -> Maybe ( Option, Argument )
-getLongOpt vOpts cmd
-    | elem ( Long cmd ) vOpts = Just ( Long cmd, NoArg )
-    | elem ( LongArg splitCmd ) vOpts = Just ( LongArg splitCmd, Arg splitArg )
-    | otherwise =  Nothing
-    where ( splitCmd, splitArg ) = splitLong cmd
+addOpt :: ( Option, Argument ) -> StateT ParserSt ( Either ParseError ) ()
+addOpt x = StateT $ \ pSt -> let xs = pOpts pSt
+                             in  Right $ ( (), pSt { pOpts = x:xs } )
+
+cantParse :: ParseError -> StateT ParserSt ( Either ParseError ) ()
+cantParse e = StateT $ \ pSt -> Left e
 
 splitLong :: String -> (String, String)
 splitLong s = (opt, arg)
