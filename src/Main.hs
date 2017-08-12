@@ -13,6 +13,7 @@ doController :: S.OptsArgs -> IO ()
 doController (opts, args) = do
     mapM_ ( prettyOpt opts ) validOpts
     mapM_ ( \ x -> putStrLn $ "argument: " ++ x ) args
+    putStrLn . show $ opts
 
 prettyOpt :: S.Options -> S.Option -> IO ()
 prettyOpt opts opt = do
